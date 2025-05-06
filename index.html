@@ -2,239 +2,212 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <title>Supervisório - Motor DC</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Supervisório TCC - Controle PID</title>
+  <script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body {
-      font-family: 'Segoe UI', sans-serif;
-      background: linear-gradient(135deg, #f3f4f6, #dbeafe);
+      font-family: Arial, sans-serif;
       margin: 0;
-      padding: 20px;
-      color: #111827;
+      background-color: #f5f5f5;
     }
-
-    h1, h2 {
-      text-align: center;
-      color: #1d4ed8;
+    header {
+      display: flex;
+      align-items: center;
+      background-color: #fff;
+      padding: 10px 20px;
+      border-bottom: 3px solid #4CAF50;
     }
-
+    header img {
+      height: 60px;
+      margin-right: 20px;
+    }
+    h1 {
+      color: #333;
+    }
     .container {
-      max-width: 900px;
-      margin: 0 auto;
-      background: white;
-      padding: 30px;
-      border-radius: 20px;
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-      animation: fadeIn 1s ease-in-out;
+      padding: 20px;
     }
-
-    .buttons {
-      text-align: center;
+    .motor-status {
+      display: flex;
+      align-items: center;
       margin: 20px 0;
     }
-
-    button {
-      background-color: #3b82f6;
-      color: white;
-      border: none;
-      border-radius: 8px;
-      padding: 12px 25px;
-      font-size: 16px;
-      margin: 10px;
-      cursor: pointer;
-      transition: background-color 0.3s ease;
+    .motor-indicator {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      background-color: gray;
+      margin-left: 10px;
     }
-
-    button:hover {
-      background-color: #2563eb;
+    .input-control {
+      margin-bottom: 20px;
     }
-
-    input {
-      padding: 10px;
-      width: 180px;
-      font-size: 16px;
-      margin-right: 10px;
-      border-radius: 6px;
-      border: 1px solid #ccc;
-    }
-
     canvas {
-      margin-top: 20px;
-      max-width: 100%;
+      background-color: #fff;
+      border: 1px solid #ccc;
+      padding: 10px;
     }
-
-    .motor {
-      text-align: center;
-      margin: 20px 0;
+    .login-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background-color: #e0e0e0;
     }
-
-    .motor img {
-      width: 100px;
-      height: 100px;
-      transition: transform 0.5s linear;
+    .login-screen input {
+      margin: 5px;
+      padding: 10px;
     }
-
-    .motor.ligado img {
-      animation: girar 1s linear infinite;
-      filter: drop-shadow(0 0 10px green);
-    }
-
-    @keyframes girar {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(30px); }
-      to { opacity: 1; transform: translateY(0); }
+    .hidden {
+      display: none;
     }
   </style>
 </head>
 <body>
+
+<div class="login-screen" id="loginScreen">
+  <h2>Login do Supervisório</h2>
+  <input type="text" id="username" placeholder="Usuário"/>
+  <input type="password" id="password" placeholder="Senha"/>
+  <button onclick="login()">Entrar</button>
+</div>
+
+<div id="mainContent" class="hidden">
+  <header>
+    <img src="logo_campus.png" alt="IFPB Cajazeiras"/>
+    <h1>Supervisório de Controle PID - Motor DC</h1>
+  </header>
+
   <div class="container">
-    <h1>Supervisório Remoto - Motor DC</h1>
-
-    <div class="motor" id="motorStatus">
-      <img src="https://cdn-icons-png.flaticon.com/512/3003/3003984.png" alt="Motor">
-      <p>Status: <span id="statusTexto">Desligado</span></p>
+    <div class="input-control">
+      <label for="setpoint">Setpoint (RPM): </label>
+      <input type="number" id="setpoint" min="0" max="150"/>
+      <button onclick="enviarSetpoint()">Enviar</button>
+      <button onclick="alternarMotor()">Ligar/Desligar Motor</button>
     </div>
 
-    <div class="buttons">
-      <button onclick="publicar('true')">🔌 Ligar Motor</button>
-      <button onclick="publicar('false')">🛑 Desligar Motor</button>
+    <div class="motor-status">
+      <p>Status do Motor:</p>
+      <div id="motorIndicator" class="motor-indicator"></div>
     </div>
 
-    <div class="buttons">
-      <input type="number" id="setpointInput" placeholder="Setpoint em RPM">
-      <button onclick="enviarSetpoint()">📤 Enviar Setpoint</button>
-    </div>
-
-    <h2>Velocidade do Motor (RPM)</h2>
-    <canvas id="grafico"></canvas>
+    <canvas id="graficoVelocidade" width="800" height="400"></canvas>
   </div>
+</div>
 
-  <script>
-    const client = mqtt.connect("wss://test.mosquitto.org:8081");
+<script>
+  const usuarioCorreto = "TCC_CJ";
+  const senhaCorreta = "CJ_IFPB";
 
-    client.on("connect", () => {
-      console.log("Conectado ao broker MQTT!");
-      client.subscribe("IFPBCajazeiras/usuario01/data");
-      client.subscribe("IFPBCajazeiras/usuario01/setpoint");
-      client.subscribe("IFPBCajazeiras/usuario01/Acionamento");
-    });
-
-    function publicar(valor) {
-      client.publish("IFPBCajazeiras/usuario01/Acionamento", valor);
-      atualizarStatusMotor(valor === "true");
+  function login() {
+    const usuario = document.getElementById("username").value;
+    const senha = document.getElementById("password").value;
+    if (usuario === usuarioCorreto && senha === senhaCorreta) {
+      document.getElementById("loginScreen").classList.add("hidden");
+      document.getElementById("mainContent").classList.remove("hidden");
+      iniciarMQTT();
+    } else {
+      alert("Usuário ou senha incorretos!");
     }
+  }
 
-    function enviarSetpoint() {
-      const valor = document.getElementById("setpointInput").value;
-      if (valor) {
-        client.publish("IFPBCajazeiras/usuario01/setpoint", valor);
-      }
-    }
+  const broker = "wss://test.mosquitto.org:8081/mqtt";
+  const topicoVelocidade = "IFPBCajazeiras/usuario01/data";
+  const topicoSetpoint = "IFPBCajazeiras/usuario01/setpoint";
+  const topicoAcionamento = "IFPBCajazeiras/usuario01/Acionamento";
 
-    const motorDiv = document.getElementById("motorStatus");
-    const statusTexto = document.getElementById("statusTexto");
-    function atualizarStatusMotor(ligado) {
-      if (ligado) {
-        motorDiv.classList.add("ligado");
-        statusTexto.textContent = "Ligado";
-      } else {
-        motorDiv.classList.remove("ligado");
-        statusTexto.textContent = "Desligado";
-      }
-    }
+  let client;
+  let tempo = 0;
+  let motorLigado = false;
 
-    const ctx = document.getElementById("grafico").getContext("2d");
-    const dadosRPM = {
-      labels: [],
+  let dadosRPM = [];
+  let dadosSetpoint = [];
+  let tempoLabels = [];
+
+  const contexto = document.getElementById("graficoVelocidade").getContext("2d");
+  const grafico = new Chart(contexto, {
+    type: "line",
+    data: {
+      labels: tempoLabels,
       datasets: [
         {
-          label: 'RPM do Motor',
-          data: [],
-          borderColor: '#1d4ed8',
-          backgroundColor: 'rgba(59, 130, 246, 0.1)',
-          fill: true,
-          tension: 0.3,
-          pointRadius: 2
+          label: "Velocidade do Motor (RPM)",
+          data: dadosRPM,
+          borderColor: "blue",
+          borderWidth: 2,
+          fill: false
         },
         {
-          label: 'Setpoint',
-          data: [],
-          borderColor: '#f59e0b',
+          label: "Setpoint (RPM)",
+          data: dadosSetpoint,
+          borderColor: "red",
           borderDash: [5, 5],
-          pointRadius: 0
+          borderWidth: 2,
+          fill: false
         }
       ]
-    };
-
-    const config = {
-      type: 'line',
-      data: dadosRPM,
-      options: {
-        responsive: true,
-        animation: {
-          duration: 300,
-          easing: 'linear'
-        },
-        scales: {
-          x: {
-            title: { display: true, text: 'Tempo (s)' },
-            ticks: { maxTicksLimit: 15 }
-          },
-          y: {
-            title: { display: true, text: 'RPM' },
-            min: 0,
-            max: 150
+    },
+    options: {
+      responsive: true,
+      scales: {
+        x: {
+          title: {
+            display: true,
+            text: "Tempo (s)"
           }
         },
-        plugins: {
-          legend: {
-            labels: {
-              color: '#1e3a8a',
-              font: { weight: 'bold' }
-            }
+        y: {
+          min: 0,
+          max: 150,
+          title: {
+            display: true,
+            text: "RPM"
           }
         }
       }
-    };
+    }
+  });
 
-    const grafico = new Chart(ctx, config);
+  function iniciarMQTT() {
+    client = mqtt.connect(broker);
+    client.on("connect", () => {
+      client.subscribe(topicoVelocidade);
+    });
 
-    let tempo = 0;
-    let setpointAtual = 0;
-
-    client.on("message", (topico, mensagem) => {
-      const msg = mensagem.toString();
-
-      if (topico === "IFPBCajazeiras/usuario01/data") {
-        const rpm = parseFloat(msg);
-        if (!isNaN(rpm)) {
-          tempo += 1;
-          dadosRPM.labels.push(tempo);
-          dadosRPM.datasets[0].data.push(rpm);
-          dadosRPM.datasets[1].data.push(setpointAtual);
-          if (dadosRPM.labels.length > 30) {
-            dadosRPM.labels.shift();
-            dadosRPM.datasets[0].data.shift();
-            dadosRPM.datasets[1].data.shift();
-          }
-          grafico.update();
+    client.on("message", (topic, message) => {
+      if (topic === topicoVelocidade) {
+        const rpm = parseFloat(message.toString());
+        tempo++;
+        if (dadosRPM.length > 60) {
+          dadosRPM.shift();
+          dadosSetpoint.shift();
+          tempoLabels.shift();
         }
-      } else if (topico === "IFPBCajazeiras/usuario01/setpoint") {
-        const sp = parseFloat(msg);
-        if (!isNaN(sp)) {
-          setpointAtual = sp;
-        }
-      } else if (topico === "IFPBCajazeiras/usuario01/Acionamento") {
-        atualizarStatusMotor(msg === "true");
+        dadosRPM.push(rpm);
+        const sp = parseFloat(document.getElementById("setpoint").value) || 0;
+        dadosSetpoint.push(sp);
+        tempoLabels.push(tempo.toString());
+        grafico.update();
       }
     });
-  </script>
+  }
+
+  function enviarSetpoint() {
+    const sp = document.getElementById("setpoint").value;
+    client.publish(topicoSetpoint, sp);
+  }
+
+  function alternarMotor() {
+    motorLigado = !motorLigado;
+    client.publish(topicoAcionamento, motorLigado ? "1" : "0");
+    const indicador = document.getElementById("motorIndicator");
+    indicador.style.backgroundColor = motorLigado ? "green" : "gray";
+  }
+</script>
+
 </body>
 </html>
