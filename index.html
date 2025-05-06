@@ -1,0 +1,240 @@
+
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Supervisório - Motor DC</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #f3f4f6, #dbeafe);
+      margin: 0;
+      padding: 20px;
+      color: #111827;
+    }
+
+    h1, h2 {
+      text-align: center;
+      color: #1d4ed8;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+      background: white;
+      padding: 30px;
+      border-radius: 20px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+      animation: fadeIn 1s ease-in-out;
+    }
+
+    .buttons {
+      text-align: center;
+      margin: 20px 0;
+    }
+
+    button {
+      background-color: #3b82f6;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 12px 25px;
+      font-size: 16px;
+      margin: 10px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: #2563eb;
+    }
+
+    input {
+      padding: 10px;
+      width: 180px;
+      font-size: 16px;
+      margin-right: 10px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+    }
+
+    canvas {
+      margin-top: 20px;
+      max-width: 100%;
+    }
+
+    .motor {
+      text-align: center;
+      margin: 20px 0;
+    }
+
+    .motor img {
+      width: 100px;
+      height: 100px;
+      transition: transform 0.5s linear;
+    }
+
+    .motor.ligado img {
+      animation: girar 1s linear infinite;
+      filter: drop-shadow(0 0 10px green);
+    }
+
+    @keyframes girar {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(30px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Supervisório Remoto - Motor DC</h1>
+
+    <div class="motor" id="motorStatus">
+      <img src="https://cdn-icons-png.flaticon.com/512/3003/3003984.png" alt="Motor">
+      <p>Status: <span id="statusTexto">Desligado</span></p>
+    </div>
+
+    <div class="buttons">
+      <button onclick="publicar('true')">🔌 Ligar Motor</button>
+      <button onclick="publicar('false')">🛑 Desligar Motor</button>
+    </div>
+
+    <div class="buttons">
+      <input type="number" id="setpointInput" placeholder="Setpoint em RPM">
+      <button onclick="enviarSetpoint()">📤 Enviar Setpoint</button>
+    </div>
+
+    <h2>Velocidade do Motor (RPM)</h2>
+    <canvas id="grafico"></canvas>
+  </div>
+
+  <script>
+    const client = mqtt.connect("wss://test.mosquitto.org:8081");
+
+    client.on("connect", () => {
+      console.log("Conectado ao broker MQTT!");
+      client.subscribe("IFPBCajazeiras/usuario01/data");
+      client.subscribe("IFPBCajazeiras/usuario01/setpoint");
+      client.subscribe("IFPBCajazeiras/usuario01/Acionamento");
+    });
+
+    function publicar(valor) {
+      client.publish("IFPBCajazeiras/usuario01/Acionamento", valor);
+      atualizarStatusMotor(valor === "true");
+    }
+
+    function enviarSetpoint() {
+      const valor = document.getElementById("setpointInput").value;
+      if (valor) {
+        client.publish("IFPBCajazeiras/usuario01/setpoint", valor);
+      }
+    }
+
+    const motorDiv = document.getElementById("motorStatus");
+    const statusTexto = document.getElementById("statusTexto");
+    function atualizarStatusMotor(ligado) {
+      if (ligado) {
+        motorDiv.classList.add("ligado");
+        statusTexto.textContent = "Ligado";
+      } else {
+        motorDiv.classList.remove("ligado");
+        statusTexto.textContent = "Desligado";
+      }
+    }
+
+    const ctx = document.getElementById("grafico").getContext("2d");
+    const dadosRPM = {
+      labels: [],
+      datasets: [
+        {
+          label: 'RPM do Motor',
+          data: [],
+          borderColor: '#1d4ed8',
+          backgroundColor: 'rgba(59, 130, 246, 0.1)',
+          fill: true,
+          tension: 0.3,
+          pointRadius: 2
+        },
+        {
+          label: 'Setpoint',
+          data: [],
+          borderColor: '#f59e0b',
+          borderDash: [5, 5],
+          pointRadius: 0
+        }
+      ]
+    };
+
+    const config = {
+      type: 'line',
+      data: dadosRPM,
+      options: {
+        responsive: true,
+        animation: {
+          duration: 300,
+          easing: 'linear'
+        },
+        scales: {
+          x: {
+            title: { display: true, text: 'Tempo (s)' },
+            ticks: { maxTicksLimit: 15 }
+          },
+          y: {
+            title: { display: true, text: 'RPM' },
+            min: 0,
+            max: 150
+          }
+        },
+        plugins: {
+          legend: {
+            labels: {
+              color: '#1e3a8a',
+              font: { weight: 'bold' }
+            }
+          }
+        }
+      }
+    };
+
+    const grafico = new Chart(ctx, config);
+
+    let tempo = 0;
+    let setpointAtual = 0;
+
+    client.on("message", (topico, mensagem) => {
+      const msg = mensagem.toString();
+
+      if (topico === "IFPBCajazeiras/usuario01/data") {
+        const rpm = parseFloat(msg);
+        if (!isNaN(rpm)) {
+          tempo += 1;
+          dadosRPM.labels.push(tempo);
+          dadosRPM.datasets[0].data.push(rpm);
+          dadosRPM.datasets[1].data.push(setpointAtual);
+          if (dadosRPM.labels.length > 30) {
+            dadosRPM.labels.shift();
+            dadosRPM.datasets[0].data.shift();
+            dadosRPM.datasets[1].data.shift();
+          }
+          grafico.update();
+        }
+      } else if (topico === "IFPBCajazeiras/usuario01/setpoint") {
+        const sp = parseFloat(msg);
+        if (!isNaN(sp)) {
+          setpointAtual = sp;
+        }
+      } else if (topico === "IFPBCajazeiras/usuario01/Acionamento") {
+        atualizarStatusMotor(msg === "true");
+      }
+    });
+  </script>
+</body>
+</html>
