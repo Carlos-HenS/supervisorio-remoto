@@ -1,213 +1,230 @@
-
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-br">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Supervisório TCC - Controle PID</title>
-  <script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Supervisório Motor DC</title>
+  <!-- Bibliotecas externas MQTT e Gráficos -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/mqttws31.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      background-color: #f5f5f5;
-    }
-    header {
-      display: flex;
-      align-items: center;
-      background-color: #fff;
-      padding: 10px 20px;
-      border-bottom: 3px solid #4CAF50;
-    }
-    header img {
-      height: 60px;
-      margin-right: 20px;
-    }
-    h1 {
-      color: #333;
-    }
-    .container {
-      padding: 20px;
-    }
-    .motor-status {
-      display: flex;
-      align-items: center;
-      margin: 20px 0;
-    }
-    .motor-indicator {
-      width: 20px;
-      height: 20px;
-      border-radius: 50%;
-      background-color: gray;
-      margin-left: 10px;
-    }
-    .input-control {
-      margin-bottom: 20px;
-    }
-    canvas {
-      background-color: #fff;
-      border: 1px solid #ccc;
-      padding: 10px;
-    }
-    .login-screen {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      height: 100vh;
-      background-color: #e0e0e0;
-    }
-    .login-screen input {
-      margin: 5px;
-      padding: 10px;
-    }
-    .hidden {
-      display: none;
-    }
+    /* Estilos Gerais */
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #000; color: #fff; font-family: Arial, sans-serif; }
+    .oculto { display: none; }
+    .centralizado { display: flex; justify-content: center; align-items: center; }
+
+    /* Tela de Login */
+    #tela-login, #painel { width: 100%; height: 100%; position: absolute; top: 0; left: 0; }
+    #tela-login { background: #111; }
+    #caixa-login { background: #222; padding: 2rem; border-radius: 1rem; box-shadow: 0 0 15px rgba(0,255,0,0.2); }
+    #caixa-login input { display: block; width: 100%; margin: 1rem 0; padding: 0.5rem; border: none; border-radius: 0.5rem; }
+    #caixa-login button { width: 100%; padding: 0.75rem; border: none; border-radius: 0.5rem; background: #0f0; color: #000; font-weight: bold; cursor: pointer; }
+
+    /* Painel Supervisório */
+    #painel { padding: 1rem; box-sizing: border-box; }
+    #cabecalho { display: flex; justify-content: space-between; align-items: center; }
+    #cabecalho img { height: 60px; }
+    #status-motor { display: flex; align-items: center; gap: 0.5rem; }
+    #indicador { width: 20px; height: 20px; border-radius: 50%; background: #800; transition: background 0.3s; }
+
+    /* Controles de Lig/Deslig */
+    #controles { margin-top: 2rem; display: flex; justify-content: center; gap: 2rem; }
+    .botao { padding: 1rem 2rem; border: none; border-radius: 1rem; font-size: 1.2rem; cursor: pointer; transition: transform 0.2s; }
+    .botao:hover { transform: scale(1.05); }
+    #botao-ligar { background: #0f0; color: #000; }
+    #botao-desligar { background: #800; color: #fff; }
+
+    /* Animação do motor */
+    #animacao-motor { margin: 2rem auto; width: 150px; height: 150px; background: url('motor.svg') no-repeat center/contain; animation: girar 0s linear infinite; }
+    @keyframes girar { to { transform: rotate(360deg); } }
+
+    /* Controle de Setpoint */
+    #controle-setpoint { margin: 2rem auto; text-align: center; }
+    #controle-setpoint input { width: 80px; padding: 0.5rem; border-radius: 0.5rem; border: none; text-align: center; }
+
+    /* Gráfico de Velocidade */
+    #container-grafico { width: 90%; max-width: 800px; margin: 2rem auto; }
   </style>
 </head>
 <body>
-
-<div class="login-screen" id="loginScreen">
-  <h2>Login do Supervisório</h2>
-  <input type="text" id="username" placeholder="Usuário"/>
-  <input type="password" id="password" placeholder="Senha"/>
-  <button onclick="login()">Entrar</button>
-</div>
-
-<div id="mainContent" class="hidden">
-  <header>
-    <img src="logo_campus.png" alt="IFPB Cajazeiras"/>
-    <h1>Supervisório de Controle PID - Motor DC</h1>
-  </header>
-
-  <div class="container">
-    <div class="input-control">
-      <label for="setpoint">Setpoint (RPM): </label>
-      <input type="number" id="setpoint" min="0" max="150"/>
-      <button onclick="enviarSetpoint()">Enviar</button>
-      <button onclick="alternarMotor()">Ligar/Desligar Motor</button>
+  <!-- Tela de Login -->
+  <div id="tela-login" class="centralizado">
+    <div id="caixa-login">
+      <h2>Login</h2>
+      <input type="text" id="campo-usuario" placeholder="Usuário" />
+      <input type="password" id="campo-senha" placeholder="Senha" />
+      <button id="botao-login">Entrar</button>
     </div>
-
-    <div class="motor-status">
-      <p>Status do Motor:</p>
-      <div id="motorIndicator" class="motor-indicator"></div>
-    </div>
-
-    <canvas id="graficoVelocidade" width="800" height="400"></canvas>
   </div>
-</div>
 
-<script>
-  const usuarioCorreto = "TCC_CJ";
-  const senhaCorreta = "CJ_IFPB";
+  <!-- Painel Supervisório -->
+  <div id="painel" class="oculto">
+    <div id="cabecalho">
+      <!-- Logo da Faculdade -->
+      <img src="logo_campus.png" alt="Logo Faculdade" />
+      <!-- Indicador de Status do Motor -->
+      <div id="status-motor">
+        <span>Status Motor:</span>
+        <div id="indicador"></div>
+      </div>
+    </div>
 
-  function login() {
-    const usuario = document.getElementById("username").value;
-    const senha = document.getElementById("password").value;
-    if (usuario === usuarioCorreto && senha === senhaCorreta) {
-      document.getElementById("loginScreen").classList.add("hidden");
-      document.getElementById("mainContent").classList.remove("hidden");
-      iniciarMQTT();
-    } else {
-      alert("Usuário ou senha incorretos!");
-    }
-  }
+    <!-- Botões Ligar/Desligar -->
+    <div id="controles">
+      <button class="botao" id="botao-ligar">LIGAR</button>
+      <button class="botao" id="botao-desligar">DESLIGAR</button>
+    </div>
 
-  const broker = "wss://test.mosquitto.org:8081/mqtt";
-  const topicoVelocidade = "IFPBCajazeiras/usuario01/data";
-  const topicoSetpoint = "IFPBCajazeiras/usuario01/setpoint";
-  const topicoAcionamento = "IFPBCajazeiras/usuario01/Acionamento";
+    <!-- Animação do Motor -->
+    <div id="animacao-motor"></div>
 
-  let client;
-  let tempo = 0;
-  let motorLigado = false;
+    <!-- Controle de Setpoint -->
+    <div id="controle-setpoint">
+      <label for="entrada-setpoint">Setpoint (RPM): </label>
+      <input type="number" id="entrada-setpoint" value="0" />
+      <button class="botao" id="botao-atualizar-setpoint">Atualizar</button>
+    </div>
 
-  let dadosRPM = [];
-  let dadosSetpoint = [];
-  let tempoLabels = [];
+    <!-- Gráfico de Velocidade vs Setpoint -->
+    <div id="container-grafico">
+      <canvas id="graficoVelocidade"></canvas>
+    </div>
+  </div>
 
-  const contexto = document.getElementById("graficoVelocidade").getContext("2d");
-  const grafico = new Chart(contexto, {
-    type: "line",
-    data: {
-      labels: tempoLabels,
-      datasets: [
-        {
-          label: "Velocidade do Motor (RPM)",
-          data: dadosRPM,
-          borderColor: "blue",
-          borderWidth: 2,
-          fill: false
+  <script>
+    /**
+     * Configurações do MQTT via WebSockets
+     */
+    const servidorMQTT = 'test.mosquitto.org';
+    const portaMQTT = 8081; // Porta WebSockets segura
+    const clienteMQTT = new Paho.MQTT.Client(servidorMQTT, portaMQTT, 'web_' + Math.random().toString(16).substr(2, 8));
+
+    // Tópicos do projeto
+    const topicoAcionamento = 'IFPBCajazeiras/usuario01/acionamento';
+    const topicoSetpoint = 'IFPBCajazeiras/usuario01/setpoint';
+    const topicoVelocidade = 'IFPBCajazeiras/usuario01/velocidade';
+
+    // Variáveis de estado
+    let motorLigado = false;
+    let valorSetpoint = 0;
+
+    // Referências de elementos HTML
+    const indicador = document.getElementById('indicador');
+    const animacaoMotor = document.getElementById('animacao-motor');
+
+    /**
+     * Ação quando a conexão MQTT é perdida
+     */
+    clienteMQTT.onConnectionLost = () => console.log('Conexão MQTT perdida');
+
+    /**
+     * Ação quando uma mensagem MQTT chega
+     * @param {Paho.MQTT.Message} msg
+     */
+    clienteMQTT.onMessageArrived = mensagemRecebida;
+
+    /**
+     * Conecta ao broker MQTT e assina o tópico de velocidade
+     */
+    function conectarMQTT() {
+      clienteMQTT.connect({
+        onSuccess: () => {
+          console.log('Conectado ao MQTT');
+          clienteMQTT.subscribe(topicoVelocidade);
         },
-        {
-          label: "Setpoint (RPM)",
-          data: dadosSetpoint,
-          borderColor: "red",
-          borderDash: [5, 5],
-          borderWidth: 2,
-          fill: false
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      scales: {
-        x: {
-          title: {
-            display: true,
-            text: "Tempo (s)"
-          }
-        },
-        y: {
-          min: 0,
-          max: 150,
-          title: {
-            display: true,
-            text: "RPM"
-          }
-        }
-      }
+        useSSL: true
+      });
     }
-  });
 
-  function iniciarMQTT() {
-    client = mqtt.connect(broker);
-    client.on("connect", () => {
-      client.subscribe(topicoVelocidade);
-    });
+    /**
+     * Função chamada ao receber dados do motor
+     * @param {Paho.MQTT.Message} msg
+     */
+    function mensagemRecebida(msg) {
+      if (msg.destinationName === topicoVelocidade) {
+        const rpm = parseFloat(msg.payloadString);
+        const horario = new Date().toLocaleTimeString();
 
-    client.on("message", (topic, message) => {
-      if (topic === topicoVelocidade) {
-        const rpm = parseFloat(message.toString());
-        tempo++;
-        if (dadosRPM.length > 60) {
-          dadosRPM.shift();
-          dadosSetpoint.shift();
-          tempoLabels.shift();
+        // Atualiza dados do gráfico
+        dadosGrafico.labels.push(horario);
+        dadosGrafico.datasets[0].data.push(rpm);
+        dadosGrafico.datasets[1].data.push(valorSetpoint);
+
+        // Manter no máximo 50 pontos
+        if (dadosGrafico.labels.length > 50) {
+          dadosGrafico.labels.shift();
+          dadosGrafico.datasets.forEach(ds => ds.data.shift());
         }
-        dadosRPM.push(rpm);
-        const sp = parseFloat(document.getElementById("setpoint").value) || 0;
-        dadosSetpoint.push(sp);
-        tempoLabels.push(tempo.toString());
         grafico.update();
       }
+    }
+
+    /**
+     * Envia comando de ligar/desligar ao motor
+     * @param {boolean} ligar
+     */
+    function enviarComando(ligar) {
+      motorLigado = ligar;
+      const msg = new Paho.MQTT.Message(ligar.toString());
+      msg.destinationName = topicoAcionamento;
+      clienteMQTT.send(msg);
+
+      // Atualiza indicador e animação
+      indicador.style.background = ligar ? 'lime' : '#800';
+      animacaoMotor.style.animationDuration = ligar ? '1s' : '0s';
+    }
+
+    /**
+     * Atualiza o setpoint e publica no broker
+     */
+    function atualizarSetpoint() {
+      valorSetpoint = parseFloat(document.getElementById('entrada-setpoint').value) || 0;
+      const msg = new Paho.MQTT.Message(valorSetpoint.toString());
+      msg.destinationName = topicoSetpoint;
+      clienteMQTT.send(msg);
+    }
+
+    /**
+     * Realiza login simples e exibe o painel
+     */
+    function realizarLogin() {
+      const usuario = document.getElementById('campo-usuario').value;
+      const senha = document.getElementById('campo-senha').value;
+      if (usuario === 'TCC_CJ' && senha === 'CJ_IFPB') {
+        document.getElementById('tela-login').classList.add('oculto');
+        document.getElementById('painel').classList.remove('oculto');
+        conectarMQTT();
+      } else {
+        alert('Credenciais inválidas');
+      }
+    }
+
+    // Configuração do gráfico Chart.js
+    const ctx = document.getElementById('graficoVelocidade').getContext('2d');
+    const dadosGrafico = {
+      labels: [],
+      datasets: [
+        { label: 'Velocidade (RPM)', data: [], borderColor: 'lime', fill: false },
+        { label: 'Setpoint (RPM)', data: [], borderColor: 'cyan', fill: false }
+      ]
+    };
+    const grafico = new Chart(ctx, {
+      type: 'line',
+      data: dadosGrafico,
+      options: {
+        animation: false,
+        scales: {
+          x: { title: { display: true, text: 'Tempo (s)' } },
+          y: { title: { display: true, text: 'RPM' } }
+        }
+      }
     });
-  }
 
-  function enviarSetpoint() {
-    const sp = document.getElementById("setpoint").value;
-    client.publish(topicoSetpoint, sp);
-  }
-
-  function alternarMotor() {
-    motorLigado = !motorLigado;
-    client.publish(topicoAcionamento, motorLigado ? "1" : "0");
-    const indicador = document.getElementById("motorIndicator");
-    indicador.style.backgroundColor = motorLigado ? "green" : "gray";
-  }
-</script>
-
+    // Event Listeners dos botões
+    document.getElementById('botao-ligar').onclick = () => enviarComando(true);
+    document.getElementById('botao-desligar').onclick = () => enviarComando(false);
+    document.getElementById('botao-atualizar-setpoint').onclick = atualizarSetpoint;
+    document.getElementById('botao-login').onclick = realizarLogin;
+  </script>
 </body>
 </html>
