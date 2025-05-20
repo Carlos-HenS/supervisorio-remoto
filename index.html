@@ -2,20 +2,20 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Login - Supervisório Motor DC</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Supervisório Motor DC</title>
+    <link rel="stylesheet" href="style.css">
 </head>
-<body>
-  <div class="login-container">
-    <img src="logo_campus.png" alt="Logo IFPB" class="logo">
-    <h2>Bem-vindo ao Supervisório</h2>
-    <input type="email" id="email" placeholder="Email" required />
-    <input type="password" id="password" placeholder="Senha" required />
-    <button onclick="login()">Entrar</button>
-    <p id="error-message" class="error"></p>
-  </div>
-  <script type="module" src="firebase.js"></script>
+<body class="login-body">
+    <div class="login-container">
+        <img src="logo_campus.png" alt="Logo IFPB" class="logo">
+        <h2>Login</h2>
+        <input type="text" id="username" placeholder="Usuário">
+        <input type="password" id="password" placeholder="Senha">
+        <button onclick="login()">Entrar</button>
+        <p id="login-error" class="error-message"></p>
+    </div>
+    <script src="login.js"></script>
 </body>
 </html>
