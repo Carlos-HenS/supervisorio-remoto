@@ -9,6 +9,8 @@
   <script src="https://www.gstatic.com/firebasejs/9.24.0/firebase-database-compat.js"></script>
   <!-- Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- Plugin Chart.js para eixo realtime -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-streaming@2.0.0"></script>
   <style>
     /* Estilos gerais */
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -112,13 +114,19 @@
         data: chartData,
         options: {
           responsive: true,
-          scales: { x: { type: 'realtime', realtime: { delay: 2000, refresh: 1000 } },
-                    y: { beginAtZero: true } }
-        }
+          scales: {
+            x: {
+              type: 'realtime',
+              realtime: { delay: 2000, refresh: 1000 }
+            },
+            y: { beginAtZero: true }
+          }
+        },
+        plugins: [ChartStreaming]
       });
     }
 
-    // Login simples em JavaScript (não seguro para produção)
+    // Login simples em JavaScript
     btnLogin.onclick = () => {
       const user = inputUser.value.trim();
       const pass = inputPass.value.trim();
