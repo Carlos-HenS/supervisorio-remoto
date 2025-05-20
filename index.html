@@ -99,6 +99,20 @@
     const inputSet = document.getElementById('inputSetpoint');
     const btnSet = document.getElementById('btnSet');
 
+    // Login simples em JavaScript
+    btnLogin.addEventListener('click', () => {
+      const user = inputUser.value.trim();
+      const pass = inputPass.value.trim();
+      if (user === 'TCC_CJ' && pass === 'CJ_IFPB') {
+        loginDiv.style.display = 'none';
+        dashDiv.style.display = 'flex';
+        initChart();
+        listenFirebase();
+      } else {
+        alert('Credenciais incorretas.');
+      }
+    });
+
     // Variáveis para Chart.js
     let velChart;
     let chartData = { labels: [], datasets: [
@@ -121,33 +135,18 @@
             },
             y: { beginAtZero: true }
           }
-        },
-        plugins: [ChartStreaming]
+        }
       });
     }
 
-    // Login simples em JavaScript
-    btnLogin.onclick = () => {
-      const user = inputUser.value.trim();
-      const pass = inputPass.value.trim();
-      if (user === 'TCC_CJ' && pass === 'CJ_IFPB') {
-        loginDiv.style.display = 'none';
-        dashDiv.style.display = 'flex';
-        initChart();
-        listenFirebase();
-      } else {
-        alert('Credenciais incorretas.');
-      }
-    };
-
     // Publica acionamento
-    btnOn.onclick = () => refAcion.set(true);
-    btnOff.onclick = () => refAcion.set(false);
+    btnOn.addEventListener('click', () => refAcion.set(true));
+    btnOff.addEventListener('click', () => refAcion.set(false));
     // Publica setpoint
-    btnSet.onclick = () => {
+    btnSet.addEventListener('click', () => {
       const val = parseFloat(inputSet.value);
       if (!isNaN(val)) refSetpoint.set(val);
-    };
+    });
 
     // Observa mudanças nos nós
     function listenFirebase() {
@@ -161,9 +160,7 @@
       refVel.on('value', snap => {
         const v = parseFloat(snap.val()) || 0;
         const now = Date.now();
-        chartData.labels.push(now);
         chartData.datasets[0].data.push({ x: now, y: v });
-        // também exibir setpoint no mesmo instante
         refSetpoint.once('value').then(ss => {
           const sp = parseFloat(ss.val()) || 0;
           chartData.datasets[1].data.push({ x: now, y: sp });
