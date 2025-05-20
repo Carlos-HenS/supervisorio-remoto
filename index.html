@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Supervisório Motor DC - TCC IFPB</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.24.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.24.0/firebase-database-compat.js"></script>
+  <!-- Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    /* Estilos gerais */
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; color: #fff; font-family: Arial, sans-serif; height: 100vh; display: flex; justify-content: center; align-items: center; }
+    #login, #dashboard { width: 90%; max-width: 800px; background: #111; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px #090; }
+    h1 { text-align: center; margin-bottom: 20px; }
+    .center { display: flex; justify-content: center; align-items: center; flex-direction: column; }
+    input, button { padding: 10px; margin: 5px; border: none; border-radius: 5px; font-size: 1rem; }
+    button { cursor: pointer; transition: transform 0.1s; }
+    button:active { transform: scale(0.95); }
+    /* Botões de controle */
+    #controls button { width: 120px; background: #222; color: #0f0; }
+    /* Indicador de estado do motor */
+    #indicator { width: 60px; height: 60px; border-radius: 50%; background: #444; margin: 10px auto; transition: background 0.3s; }
+    /* Área de gráfico */
+    #chart-container { width: 100%; height: 300px; margin-top: 20px; }
+    /* Logo no topo */
+    #logo { display: block; margin: 0 auto 20px; max-height: 80px; }
+  </style>
+</head>
+<body>
+  <!-- Tela de Login -->
+  <div id="login" class="center">
+    <h1>Login - Supervisório Motor DC</h1>
+    <input type="text" id="user" placeholder="Usuário" />
+    <input type="password" id="pass" placeholder="Senha" />
+    <button id="btnLogin">Entrar</button>
+  </div>
+
+  <!-- Dashboard após login -->
+  <div id="dashboard" class="center" style="display:none;">
+    <img id="logo" src="logo_campus.png" alt="Logo IFPB" />
+    <h1>Controle e Monitoramento do Motor DC</h1>
+    <!-- Controles de acionamento -->
+    <div id="controls" class="center">
+      <button id="btnOn">Ligar Motor</button>
+      <button id="btnOff">Desligar Motor</button>
+    </div>
+    <!-- Indicador de funcionamento do motor -->
+    <div>
+      <div id="indicator"></div>
+      <small id="statusText">Motor Desligado</small>
+    </div>
+    <!-- Setpoint -->
+    <div class="center">
+      <input type="number" id="inputSetpoint" placeholder="Novo Setpoint (RPM)" />
+      <button id="btnSet">Publicar Setpoint</button>
+    </div>
+    <!-- Gráfico de velocidade e setpoint -->
+    <div id="chart-container">
+      <canvas id="velChart"></canvas>
+    </div>
+  </div>
+
+  <script>
+    // Configuração Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyA39yFx4qroYYY7HiYef9zcQkVfz1ucAiE",
+      authDomain: "dados-motor-dc.firebaseapp.com",
+      databaseURL: "https://dados-motor-dc-default-rtdb.firebaseio.com",
+      projectId: "dados-motor-dc",
+      storageBucket: "dados-motor-dc.appspot.com",
+      messagingSenderId: "469754758101",
+      appId: "1:469754758101:web:de6e62db264a31f8b3f35c",
+      measurementId: "G-ERQ86KQSG4"
+    };
+    // Inicializa Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // Referências aos nós do Realtime DB
+    const refAcion = db.ref('IFPBCajazeiras/usuario01/acionamento');
+    const refSetpoint = db.ref('IFPBCajazeiras/usuario01/setpoint');
+    const refVel = db.ref('IFPBCajazeiras/usuario01/velocidade');
+
+    // Elementos DOM
+    const loginDiv = document.getElementById('login');
+    const dashDiv = document.getElementById('dashboard');
+    const btnLogin = document.getElementById('btnLogin');
+    const inputUser = document.getElementById('user');
+    const inputPass = document.getElementById('pass');
+    const btnOn = document.getElementById('btnOn');
+    const btnOff = document.getElementById('btnOff');
+    const indicator = document.getElementById('indicator');
+    const statusText = document.getElementById('statusText');
+    const inputSet = document.getElementById('inputSetpoint');
+    const btnSet = document.getElementById('btnSet');
+
+    // Variáveis para Chart.js
+    let velChart;
+    let chartData = { labels: [], datasets: [
+      { label: 'Velocidade (RPM)', data: [], borderColor: 'lime', fill: false },
+      { label: 'Setpoint (RPM)', data: [], borderColor: 'cyan', fill: false }
+    ]};
+
+    // Função de inicialização do gráfico
+    function initChart() {
+      const ctx = document.getElementById('velChart').getContext('2d');
+      velChart = new Chart(ctx, {
+        type: 'line',
+        data: chartData,
+        options: {
+          responsive: true,
+          scales: { x: { type: 'realtime', realtime: { delay: 2000, refresh: 1000 } },
+                    y: { beginAtZero: true } }
+        }
+      });
+    }
+
+    // Login simples em JavaScript (não seguro para produção)
+    btnLogin.onclick = () => {
+      const user = inputUser.value.trim();
+      const pass = inputPass.value.trim();
+      if (user === 'TCC_CJ' && pass === 'CJ_IFPB') {
+        loginDiv.style.display = 'none';
+        dashDiv.style.display = 'flex';
+        initChart();
+        listenFirebase();
+      } else {
+        alert('Credenciais incorretas.');
+      }
+    };
+
+    // Publica acionamento
+    btnOn.onclick = () => refAcion.set(true);
+    btnOff.onclick = () => refAcion.set(false);
+    // Publica setpoint
+    btnSet.onclick = () => {
+      const val = parseFloat(inputSet.value);
+      if (!isNaN(val)) refSetpoint.set(val);
+    };
+
+    // Observa mudanças nos nós
+    function listenFirebase() {
+      // Acionamento
+      refAcion.on('value', snap => {
+        const ligado = snap.val() === true;
+        indicator.style.background = ligado ? '#0f0' : '#444';
+        statusText.textContent = ligado ? 'Motor Ligado' : 'Motor Desligado';
+      });
+      // Velocidade
+      refVel.on('value', snap => {
+        const v = parseFloat(snap.val()) || 0;
+        const now = Date.now();
+        chartData.labels.push(now);
+        chartData.datasets[0].data.push({ x: now, y: v });
+        // também exibir setpoint no mesmo instante
+        refSetpoint.once('value').then(ss => {
+          const sp = parseFloat(ss.val()) || 0;
+          chartData.datasets[1].data.push({ x: now, y: sp });
+          velChart.update('quiet');
+        });
+      });
+    }
+  </script>
+</body>
+</html>
