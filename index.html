@@ -1,0 +1,45 @@
+
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Supervisório Motor DC</title>
+  <link rel="stylesheet" href="style.css"/>
+  <script src="https://cdn.jsdelivr.net/npm/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="login-container" id="login">
+    <h2>Login</h2>
+    <input type="text" id="username" placeholder="Usuário" />
+    <input type="password" id="password" placeholder="Senha" />
+    <button onclick="login()">Entrar</button>
+    <p id="login-error" class="error"></p>
+  </div>
+
+  <div id="dashboard" style="display:none;">
+    <header>
+      <img src="logo_campus.png" alt="Logo Campus" class="logo" />
+      <h1>Supervisório - Controle de Motor DC</h1>
+    </header>
+    <main>
+      <div class="control-panel">
+        <h2>Status do Motor</h2>
+        <img id="motor-img" src="motor_static.png" alt="Motor" class="motor" />
+        <div class="buttons">
+          <button onclick="sendCommand('ON')">Ligar</button>
+          <button onclick="sendCommand('OFF')">Desligar</button>
+        </div>
+        <input type="number" id="setpoint" placeholder="Setpoint (RPM)" />
+        <button onclick="sendSetpoint()">Enviar Setpoint</button>
+      </div>
+      <div class="graph-panel">
+        <canvas id="rpmChart"></canvas>
+      </div>
+    </main>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
